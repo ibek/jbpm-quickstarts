@@ -1,8 +1,5 @@
 package org.jboss.example.test;
 
-import java.io.File;
-import java.io.FilenameFilter;
-
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.Persistence;
 
