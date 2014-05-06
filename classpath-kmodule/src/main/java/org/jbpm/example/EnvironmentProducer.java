@@ -1,41 +1,46 @@
-package org.jboss.example.test;
+package org.jbpm.example;
+
+import java.io.File;
+import java.io.FilenameFilter;
 
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.Persistence;
 
 import org.jbpm.services.task.identity.JBossUserGroupCallbackImpl;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
 import org.kie.api.runtime.EnvironmentName;
 import org.kie.api.runtime.KieSession;
 import org.kie.api.runtime.manager.RuntimeEngine;
 import org.kie.api.runtime.manager.RuntimeEnvironmentBuilder;
 import org.kie.api.runtime.manager.RuntimeManager;
 import org.kie.api.runtime.manager.RuntimeManagerFactory;
-import org.kie.api.runtime.process.ProcessInstance;
 import org.kie.internal.runtime.manager.context.EmptyContext;
 
 import bitronix.tm.TransactionManagerServices;
 import bitronix.tm.resource.jdbc.PoolingDataSource;
 
-public class ClasspathKmoduleDefaultBuilderTest {
+public class EnvironmentProducer {
+    
+    private static EnvironmentProducer instance;
 
     protected PoolingDataSource pds;
-
+    
     protected RuntimeManager manager;
-
+    
     protected RuntimeEngine engine;
-
-    @Before
-    public void setup() {
+    
+    private EnvironmentProducer() {
         setupPoolingDataSource();
         setupRuntimeManager();
     }
-
-    @After
-    public void cleanup() {
+    
+    public static EnvironmentProducer getInstance() {
+        if (instance == null) {
+            instance = new EnvironmentProducer();
+        }
+        return instance;
+    }
+    
+    public void close() {
         if (manager != null) {
             manager.close();
             manager = null;
@@ -47,12 +52,16 @@ public class ClasspathKmoduleDefaultBuilderTest {
         System.clearProperty("java.naming.factory.initial");
     }
 
-    @Test
-    public void testHelloWorldProcess() {
-        KieSession ksession = engine.getKieSession();
-        ProcessInstance pi = ksession.startProcess("org.jboss.example.HelloWorldProcess");
-        Assert.assertNotNull(pi);
-        Assert.assertEquals(ProcessInstance.STATE_COMPLETED, pi.getState());
+    public RuntimeManager getRuntimeManager() {
+        return manager;
+    }
+    
+    public RuntimeEngine getEngine() {
+        return engine;
+    }
+    
+    public KieSession getKieSession() {
+        return engine.getKieSession();
     }
 
     private void setupPoolingDataSource() {
@@ -73,6 +82,7 @@ public class ClasspathKmoduleDefaultBuilderTest {
     }
 
     private void setupRuntimeManager() {
+        cleanupSingletonSessionId();
         EntityManagerFactory emf = Persistence.createEntityManagerFactory("jbpm.persistence.unit");
         RuntimeEnvironmentBuilder builder = RuntimeEnvironmentBuilder.Factory
                 .get()
@@ -82,9 +92,27 @@ public class ClasspathKmoduleDefaultBuilderTest {
                         TransactionManagerServices.getTransactionManager())
                 .userGroupCallback(new JBossUserGroupCallbackImpl("classpath:/usergroups.properties"));
 
-        manager = RuntimeManagerFactory.Factory.get().newPerProcessInstanceRuntimeManager(builder.get());
+        manager = RuntimeManagerFactory.Factory.get().newSingletonRuntimeManager(builder.get());
 
         engine = manager.getRuntimeEngine(EmptyContext.get());
     }
-
+    
+    private static void cleanupSingletonSessionId() {
+        File tempDir = new File(System.getProperty("java.io.tmpdir"));
+        if (tempDir.exists()) {
+            
+            String[] jbpmSerFiles = tempDir.list(new FilenameFilter() {
+                
+                public boolean accept(File dir, String name) {
+                    
+                    return name.endsWith("-jbpmSessionId.ser");
+                }
+            });
+            for (String file : jbpmSerFiles) {
+                
+                new File(tempDir, file).delete();
+            }
+        }
+    }
+    
 }
